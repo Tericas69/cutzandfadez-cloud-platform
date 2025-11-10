@@ -1,9 +1,44 @@
-provider "aws" {
-  region = "us-east-1"
+# main.tf
+# Core infrastructure for the Cutz & Fadez Cloud Platform
+
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
 }
 
-resource "aws_s3_bucket" "static_site" {
-  bucket = "cutzandfadez-static-site"
+# -------------------------------------------------------------------
+# Networking
+# -------------------------------------------------------------------
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name = "${var.project_name}-vpc"
+  cidr = var.vpc_cidr
+
+  azs             = ["us-east-1a", "us-east-1b"]
+  public_subnets  = var.public_subnets
+  private_subnets = var.private_subnets
+
+  enable_nat_gateway = true
+  enable_vpn_gateway = false
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+# -------------------------------------------------------------------
+# S3 for static site hosting
+# -------------------------------------------------------------------
+resource "aws_s3_bucket" "frontend_bucket" {
+  bucket = "${var.project_name}-${var.environment}-frontend"
   acl    = "public-read"
 
   website {
@@ -12,7 +47,28 @@ resource "aws_s3_bucket" "static_site" {
   }
 
   tags = {
-    Name        = "Cutz & Fadez Static Website"
-    Environment = "Dev"
+    Project     = var.project_name
+    Environment = var.environment
   }
 }
+
+# -------------------------------------------------------------------
+# RDS for application data
+# -------------------------------------------------------------------
+resource "aws_db_instance" "app_db" {
+  allocated_storage    = 20
+  engine               = "mysql"
+  engine_version       = "8.0"
+  instance_class       = "db.t3.micro"
+  name                 = "cutzfadezdb"
+  username             = "admin"
+  password             = "changeme123"
+  parameter_group_name = "default.mysql8.0"
+  skip_final_snapshot  = true
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
